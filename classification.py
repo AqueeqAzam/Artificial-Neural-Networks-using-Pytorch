@@ -1,4 +1,4 @@
-# PyTorch version of your TensorFlow code
+# PyTorch version of your TensorFlow code (Updated with better training logs)
 import logging
 import pandas as pd
 import numpy as np
@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.utils.data import DataLoader, TensorDataset
+from tqdm import tqdm
 
 # -------------------- Logging Setup --------------------
 logging.basicConfig(level=logging.INFO, format='%(message)s', force=True)
@@ -65,18 +67,35 @@ def train_model(model, X_train, y_train, X_val, y_val, epochs=20, batch_size=32)
     X_val = torch.tensor(X_val, dtype=torch.float32)
     y_val = torch.tensor(y_val, dtype=torch.float32)
 
+    dataset = TensorDataset(X_train, y_train)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
     for epoch in range(epochs):
         model.train()
-        optimizer.zero_grad()
-        outputs = model(X_train)
-        loss = criterion(outputs, y_train)
-        loss.backward()
-        optimizer.step()
+        epoch_loss = 0
+        epoch_mae = 0
+
+        for batch_X, batch_y in tqdm(loader, desc=f"Epoch {epoch+1}/{epochs}"):
+            optimizer.zero_grad()
+            outputs = model(batch_X)
+            loss = criterion(outputs, batch_y)
+            mae = torch.mean(torch.abs(outputs - batch_y))
+
+            loss.backward()
+            optimizer.step()
+
+            epoch_loss += loss.item()
+            epoch_mae += mae.item()
 
         model.eval()
-        val_outputs = model(X_val)
-        val_loss = criterion(val_outputs, y_val)
-        logging.info(f"Epoch {epoch+1}/{epochs}, Loss: {loss.item():.4f}, Val Loss: {val_loss.item():.4f}")
+        with torch.no_grad():
+            val_outputs = model(X_val)
+            val_loss = criterion(val_outputs, y_val)
+            val_mae = torch.mean(torch.abs(val_outputs - y_val))
+
+        print(f"📊 Epoch {epoch+1}/{epochs} - Loss: {epoch_loss/len(loader):.4f}, "
+              f"MAE: {epoch_mae/len(loader):.4f}, Val Loss: {val_loss.item():.4f}, "
+              f"Val MAE: {val_mae.item():.4f}")
 
 # -------------------- Predict --------------------
 def make_predictions(model, X_val, y_scaler):
